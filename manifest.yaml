@@ -1,0 +1,24 @@
+name: captains_log
+display_name: Captain's Log
+description: Dictated logs — the bot opens a log, summarizes the conversation into structured entries, compiles a document on close, and the owner approves it
+category: Memory
+icon: book-open
+color: sky
+version: "0.1.0"
+database: true
+admin_panel: admin.html
+admin_label: Captain's Logs
+admin_api: admin_api.py
+
+credentials: []
+
+claudemd:
+  loading_guidance: |
+    When the owner says "begin captain's log" (or asks you to start a log / journal /
+    write-up of a conversation), call captains_log_begin BEFORE replying. From then on,
+    every few turns call captains_log_append with a SUMMARY of what was said — never a
+    transcript — and a `why` explaining what that fragment is for. When they say "end
+    captain's log", call captains_log_end with a closing summary. A log left open is
+    abandoned automatically; it is not lost, but it is not a document either.
+    Logs are PROPOSALS: nothing is kept until the owner approves it in the admin panel,
+    and an unapproved log expires after 48 hours.
