@@ -54,7 +54,7 @@ Tag it so it can be found later:
 - **`project`** — a project being designed or discussed. `begin` returns
   `possible_duplicates`; if one of them is plainly the same project, say so and ask whether
   to continue it (`continue_from: <stardate>`) rather than starting a second log about it.
-- Plus whatever names the subject: `roblox`, `instar`, `cenora`.
+- Plus whatever names the subject: `roblox`, `instar`, `work`.
 
 `captains_log_end` takes a `closing` — a few sentences on what the conversation amounted to
 and where it leaves things. Then tell the owner the truth about what happens next:

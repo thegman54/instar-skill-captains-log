@@ -56,7 +56,7 @@ the admin panel; there is no cron to install.
 |---|---|
 | `stardate` | General daily journal — whatever happened, whatever's on your mind |
 | `project` | A project being designed. `begin` checks for existing logs on the same subject and returns them as `possible_duplicates`. |
-| anything else | Subject tags — `roblox`, `instar`, `cenora`, … |
+| anything else | Subject tags — `roblox`, `instar`, `work`, … |
 
 ## Admin panel
 
