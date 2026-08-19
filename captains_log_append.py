@@ -2,9 +2,10 @@
 captains_log_append — add one summarized fragment to the open log.
 
 The log is a document, not a recording. Each fragment is a typed, self-contained summary
-of something that was established — plus a `why` that says what it is doing in the log.
-The `why` is not paperwork: it is what forces a fragment to be a conclusion rather than a
-paraphrase of the last thing said.
+of something that was established — plus a `reason` that says what it is doing in the log.
+The reason is not paperwork: it is what forces a fragment to be a conclusion rather than a
+paraphrase of the last thing said. (It is stored in the `why` column; the tool argument
+cannot be called `why` — see the note on the schema below.)
 """
 
 import json
@@ -41,7 +42,7 @@ class CaptainsLogAppendTool(BaseTool):
             "small talk. One idea per call; several calls in a row is normal and correct. "
             "Pick the `kind` honestly — a decision is a decision, a maybe is an idea — because the "
             "compiled document is grouped by kind, and that grouping is what makes it useful later. "
-            "Every entry needs a `why`: what this fragment is doing in the log."
+            "Every entry needs a `reason`: what this fragment is doing in the log."
         )
 
     @property
@@ -63,7 +64,11 @@ class CaptainsLogAppendTool(BaseTool):
                     "type": "string",
                     "description": "The summary. Self-contained, specific, past tense. For 'quote', the exact words.",
                 },
-                "why": {
+                # NOT named `why`: the MCP layer appends a universal optional `why` to every
+                # tool signature (a trace annotation it strips before the executor). Declaring
+                # our own `why` collides with it, and the collision raises during dynamic
+                # registration — which aborts registration for every tool after this one.
+                "reason": {
                     "type": "string",
                     "description": "Why this belongs in the log — what it settles, unblocks, or constrains. Required.",
                 },
@@ -77,7 +82,7 @@ class CaptainsLogAppendTool(BaseTool):
                     "description": "Optional structured extras — owner, deadline, url, alternatives considered, etc.",
                 },
             },
-            "required": ["kind", "content", "why"],
+            "required": ["kind", "content", "reason"],
         }
 
     def credential_keys(self) -> list[str]:
@@ -87,7 +92,7 @@ class CaptainsLogAppendTool(BaseTool):
         self,
         kind: str,
         content: str,
-        why: str,
+        reason: str,
         tags: list[str] = None,
         detail: dict = None,
         **kwargs,
@@ -124,7 +129,7 @@ class CaptainsLogAppendTool(BaseTool):
             await conn.execute(
                 """INSERT INTO captains_log_entries (log_id, seq, kind, content, why, tags, detail)
                    VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb)""",
-                open_log["id"], seq, kind, content.strip(), (why or "").strip(),
+                open_log["id"], seq, kind, content.strip(), (reason or "").strip(),
                 tags, json.dumps(detail or {}),
             )
             await conn.execute(

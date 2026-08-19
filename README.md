@@ -16,7 +16,7 @@ write-up waiting when you get home.
 | Tool | Description |
 |---|---|
 | `captains_log_begin` | Open a log — title, tags, purpose. Returns a stardate and any possible duplicates. |
-| `captains_log_append` | Add one summarized entry: `kind`, `content`, and a required `why`. |
+| `captains_log_append` | Add one summarized entry: `kind`, `content`, and a required `reason`. |
 | `captains_log_end` | Close it, compile the document, send it for approval. |
 | `captains_log_status` | Is a log open? What's in it? What were the last few? |
 | `captains_log_search` | Find approved logs by text, tags, or stardate prefix. |

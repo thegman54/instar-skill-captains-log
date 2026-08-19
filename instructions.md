@@ -27,7 +27,7 @@ worthless later; a decision with its reasoning is not.
 - **One idea per call.** Several calls in a row is normal.
 - **Pick `kind` honestly.** A maybe is an `idea`, not a `decision`. The compiled document is
   grouped by kind, and that grouping is the whole value of it.
-- **Every entry carries a `why`** — what it settles, unblocks, or constrains. If you cannot
+- **Every entry carries a `reason`** — what it settles, unblocks, or constrains. If you cannot
   write the why, you do not yet understand the thing well enough to log it. Ask.
 - **Do not log small talk**, and do not log a thing twice because it got repeated.
 - Use `quote` sparingly, for words worth preserving exactly.

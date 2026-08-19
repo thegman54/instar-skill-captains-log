@@ -17,7 +17,7 @@ a truncated table. This needs a document viewer, and a skill gets exactly one ad
 
 ```
 captains_log_begin   -> open a log, one per speaker
-captains_log_append  -> one typed, summarized fragment (+ a required `why`)
+captains_log_append  -> one typed, summarized fragment (+ a required `reason`)
 captains_log_end     -> compile to markdown + JSON, status pending, owner approves
 captains_log_status  -> is one open, what's in it
 captains_log_search  -> approved logs by text / tags / stardate prefix
@@ -55,6 +55,14 @@ If you are changing behavior, it is almost certainly a change to `_log.py`, not 
 
 ## Framework facts worth knowing (learned the annoying way)
 
+- **`why` is a RESERVED tool-argument name.** The MCP layer appends a universal optional
+  `why` to every tool signature as a trace annotation, and strips it before the executor. A
+  tool that declares its own `why` raises `duplicate parameter name` during dynamic
+  registration — which **aborts registration for every tool after it in schema order**. That
+  is exactly how this skill shipped with only `captains_log_begin` visible to the bot while
+  all six were in the catalog and the tool belt. Our field is `reason`; the DB column is
+  still `why`.
+
 - Skill admin routes are proxied `/api/{skill}/…` → tool-executor `/skill_api/{skill}/…`
   and dispatched against the `routes` table at the bottom of `admin_api.py`.
 - **Query strings are stripped before routing, and GET bodies are not parsed.** So list
@@ -64,6 +72,11 @@ If you are changing behavior, it is almost certainly a change to `_log.py`, not 
   Return a JSON-serializable dict; `__status` sets a non-200 code.
 - Migrations under `migrations/` run automatically on install and must be idempotent — they
   re-run. Everything here is `IF NOT EXISTS`.
+- Symptom to recognize: tools present in `/tools/catalog` and in `bot_profiles.tool_belt`
+  but unresolvable by the bot means the **MCP layer** is the stale/broken one. Check
+  `docker logs instar-mcp-server | grep dynamic_tools_registered` — a count lower than the
+  catalog means registration died partway. `POST /admin/reload` on the mcp-server
+  re-registers without a restart (and without dropping live sessions).
 - The tool base class hands you `self._session_id`, `self._gatekeeper_url`,
   `self._profile_slug`, and `_conversation_id` in kwargs.
 
