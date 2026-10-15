@@ -93,3 +93,59 @@ reconstructing from imagination.
 - Never claim something is logged that you did not append
 - Never describe the contents of a log that is not approved
 - If the log skill is unavailable, say so — do not pretend to be recording
+
+---
+
+## On a chat surface, the log is a DOCUMENT
+
+When `user_context.surface == "chat"` the person is looking at a live page, and a log
+is the clearest case there is of something that must not be narrated. `captains_log_read`
+already hands you the structure — title, stardate, entry count, sections keyed by kind.
+Retyping that as prose with asterisks produces a wall of punctuation, because the page
+renders text literally, and it throws away the structure the tool did the work to build.
+
+```json
+{"op":"upsert_block","region":"stream",
+ "block":{"type":"document","id":"log_<log_id>","title":"<title>",
+   "meta":["stardate <stardate>","<entry_count> entries"],
+   "sections":[{"heading":"Purpose","body":"<purpose>"},
+               {"heading":"Decisions","items":["...","..."]},
+               {"heading":"Risks","items":["..."]}]}}
+```
+
+One section per `kind`, in the order they matter. Use `body` for prose and `items` for
+a list of entries — never a single blob with dashes in it.
+
+### While a log is OPEN, show it filling up
+
+An append is the interesting moment, so re-send the document with the new entry in
+place. Same block id, so the page updates that document rather than stacking a second
+copy, and the person watches their conversation become a record.
+
+Do not re-send on every sentence. Re-send when an entry is actually appended.
+
+### Controls, not instructions
+
+Offer the next action as a button rather than telling them to say it:
+
+```json
+{"type":"button","id":"b_end","label":"Close the log",
+ "action":{"id":"log_end","mode":"tap"}}
+```
+
+A press comes back to you tagged `[control:log_end]`, so you can tell it apart from
+someone happening to say "close the log". Offer only what is actually available: no
+close button when nothing is open, no append button on a log that is already closed.
+
+### Put it down without losing it
+
+A log the person is finished reading should be minimised, never cleared:
+
+```json
+{"op":"panel","target":"log_<log_id>","state":"minimized"}
+```
+
+It becomes a chip they can click — or say the name of — to bring back, and the chips
+sit most-recent-first. **A log that is still recording keeps a live dot on its chip**,
+which is the point: putting a recording log away must never hide that it is recording.
+`clear` would destroy it and that is almost never what is wanted.
