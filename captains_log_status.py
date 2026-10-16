@@ -10,7 +10,7 @@ import structlog
 from ..base import BaseTool, ToolResult
 from ..registry import register_tool
 from ._speaker import resolve_speaker
-from ._log import get_open_log, sweep
+from ._log import fetch_entries, get_open_log, sweep
 
 log = structlog.get_logger()
 
@@ -33,7 +33,12 @@ class CaptainsLogStatusTool(BaseTool):
             "Check whether a captain's log is currently open for this person, what is in it so far, "
             "and what their recent logs were. Call it when the owner asks whether you are logging, "
             "when they refer to 'the log' and you are not sure one is open, or before opening a new "
-            "one if you suspect an earlier conversation was cut short. Cheap — no side effects."
+            "one if you suspect an earlier conversation was cut short. Cheap — no side effects.\n\n"
+            "When a log is open, `open.sections` carries the entries recorded so far, in the "
+            "same shape captains_log_read returns — so you can show the owner their log "
+            "filling up while it is still being dictated. captains_log_read still refuses "
+            "anything unapproved; this is their own open log, in this session, shown back "
+            "to them."
         )
 
     @property
@@ -62,6 +67,22 @@ class CaptainsLogStatusTool(BaseTool):
                     "SELECT kind, count(*) AS n FROM captains_log_entries WHERE log_id = $1 GROUP BY kind",
                     open_log["id"],
                 )
+                # The entries of the log being dictated RIGHT NOW, in the same shape
+                # captains_log_read returns, so the open log can be rendered as the
+                # same document.
+                #
+                # This does NOT weaken the approval gate, and deliberately so. read
+                # refuses anything unapproved because an unapproved log is a proposal
+                # - the bot must not treat it as fact or show someone else's draft.
+                # Neither applies here: get_open_log is scoped to THIS speaker and
+                # THIS session, so it is the owner's own words, dictated moments ago,
+                # being shown back to them. Still not searchable, still not readable
+                # by anyone else, still requiring approval before it is a record.
+                live = await fetch_entries(conn, open_log["id"])
+                sections: dict[str, list] = {}
+                for e in live:
+                    sections.setdefault(e["kind"], []).append(
+                        {"content": e["content"], "why": e["why"]})
                 open_info = {
                     "log_id": str(open_log["id"]),
                     "stardate": open_log["stardate"],
@@ -70,6 +91,7 @@ class CaptainsLogStatusTool(BaseTool):
                     "entry_count": open_log["entry_count"],
                     "by_kind": {r["kind"]: r["n"] for r in kinds},
                     "started_at": open_log["started_at"].isoformat(),
+                    "sections": sections,
                 }
 
             recent = await conn.fetch(

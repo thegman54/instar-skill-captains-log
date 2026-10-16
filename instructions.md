@@ -118,6 +118,13 @@ a list of entries — never a single blob with dashes in it.
 
 ### While a log is OPEN, show it filling up
 
+`captains_log_read` only reads an APPROVED log — it will refuse an open one, and it is
+right to: an unapproved log is a proposal, not a record.
+
+For the log being dictated right now, use `captains_log_status`. Its `open.sections`
+carries the entries so far in the same shape, because that log is the owner's own
+words in this session being shown back to them.
+
 An append is the interesting moment, so re-send the document with the new entry in
 place. Same block id, so the page updates that document rather than stacking a second
 copy, and the person watches their conversation become a record.
