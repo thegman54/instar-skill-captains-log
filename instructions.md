@@ -96,6 +96,54 @@ reconstructing from imagination.
 
 ---
 
+## On a chat surface, the log is a TOOL you open
+
+"Open the captain's log" is a request to GO somewhere, not to be told what the log can
+do. Open the workspace first — it gives the tool the screen and moves the conversation
+to the side — and put everything else inside it.
+
+```json
+{"op":"workspace","id":"captains_log","title":"Captain's Log","state":"open"}
+{"op":"upsert_block","region":"workspace_nav",
+ "block":{"type":"button","id":"n_search","label":"Search","action":{"id":"search"}}}
+{"op":"upsert_block","region":"workspace","block":{"type":"capability_set", "...": "..."}}
+```
+
+The rail (`workspace_nav`) holds the few things the log does and stays put while the
+surface scrolls. The surface (`workspace`) holds what they are looking at.
+
+### Every row they can see, they can press
+
+A list of logs that cannot be clicked makes someone say the name of a thing already on
+their screen. Give the results `select`, and every row becomes pressable:
+
+```json
+{"op":"upsert_block","region":"workspace",
+ "block":{"type":"items","id":"log_hits","title":"Logs matching \"sonora\"",
+   "select":{"id":"open_log"},
+   "items":[{"id":"20261015.1","title":"Karyn bot for Sonora","state":"done",
+             "meta":["stardate 20261015.1","15 entries","project · karyn · sonora"]}]}}
+```
+
+Pressing one sends you `action_id: "open_log"` with the row's id as `value`. Read that
+log and replace the surface with its document — same `region:"workspace"`.
+
+So the whole path, with no typing and no speaking:
+
+| they press | you do |
+|---|---|
+| **Search** (capability or rail) | `captains_log_search` → an `items` block with `select` |
+| **a log row** | `captains_log_read(stardate)` → a `document` in the workspace |
+| **Close the log** | `captains_log_end` |
+
+**Press the control you used.** Before you replace the surface, send
+`{"op":"press","action":"search"}` so the thing they pressed visibly reacts, and so a
+surface YOU changed on your own initiative still reads as an action rather than a glitch.
+
+**A press is a claim, not an authority.** `open_log` carrying a stardate is a request to
+read that log, checked exactly like a spoken one — it does not bypass the approval gate,
+and an open log still refuses to be read.
+
 ## On a chat surface, the log is a DOCUMENT
 
 When `user_context.surface == "chat"` the person is looking at a live page, and a log
@@ -104,8 +152,12 @@ already hands you the structure — title, stardate, entry count, sections keyed
 Retyping that as prose with asterisks produces a wall of punctuation, because the page
 renders text literally, and it throws away the structure the tool did the work to build.
 
+Put it in `region:"workspace"` when the tool is open, `region:"stream"` when it is not
+— a document in the stream is a message that scrolls away, which is right for an answer
+and wrong for something they are reading inside a tool.
+
 ```json
-{"op":"upsert_block","region":"stream",
+{"op":"upsert_block","region":"workspace",
  "block":{"type":"document","id":"log_<log_id>","title":"<title>",
    "meta":["stardate <stardate>","<entry_count> entries"],
    "sections":[{"heading":"Purpose","body":"<purpose>"},
