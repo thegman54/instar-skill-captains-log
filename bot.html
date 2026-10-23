@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Captain's Log</title>
+<!--
+  THE CAPTAIN'S LOG, as its own interface.
+
+  This file runs inside an iframe with sandbox="allow-scripts" and nothing else, which
+  means it has an opaque origin: no access to the host page, its cookies, its storage or
+  its socket. One channel out — postMessage to the parent — and everything it sends is
+  treated there as a claim, not an instruction.
+
+  It renders DATA the bot sends and reports PRESSES back. It never decides what a search
+  returns, never reads a log itself, and holds nothing the bot did not hand it. The bot
+  owns the facts; this file owns what they look like.
+
+  Both halves of that matter. A model composing this screen out of generic blocks pays
+  an essay of layout per turn and draws it slightly differently every time. A model that
+  sends {logs:[...]} gets the same screen every time for twenty tokens.
+-->
+<style>
+  :root{
+    --bg:transparent; --ink:#e7edf6; --soft:#8697ad; --accent:#3fe0c0;
+    --line:#e7edf61f; --surface:#111823b8;
+    --font:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --ease:cubic-bezier(.2,.7,.2,1);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--font);
+       display:flex;flex-direction:column;overflow:hidden}
+
+  /* SEARCH. A real field, because "say the words out loud" is not always what someone
+     wants — a stardate is eleven digits and nobody enjoys dictating those. */
+  .bar{flex:0 0 auto;display:flex;gap:8px;padding:14px 16px;border-bottom:1px solid var(--line)}
+  .bar input{flex:1 1 auto;min-width:0;background:#0b111a99;color:var(--ink);
+       border:1px solid var(--line);border-radius:10px;padding:11px 13px;
+       font:15px var(--font);outline:none}
+  .bar input:focus{border-color:color-mix(in oklab,var(--accent) 60%,transparent)}
+  .bar input::placeholder{color:var(--soft)}
+  .bar button{flex:0 0 auto;appearance:none;cursor:pointer;border-radius:10px;
+       border:1px solid color-mix(in oklab,var(--accent) 50%,transparent);
+       background:color-mix(in oklab,var(--accent) 14%,transparent);
+       color:var(--ink);font:650 12px var(--font);letter-spacing:.1em;
+       text-transform:uppercase;padding:0 16px}
+  .bar button:hover{background:color-mix(in oklab,var(--accent) 24%,transparent)}
+
+  .wrap{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,340px) 1fr}
+  @media (max-width:760px){
+    .wrap{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+    .list{max-height:38vh;border-right:0;border-bottom:1px solid var(--line)}
+  }
+
+  /* THE RESULTS. */
+  .list{min-height:0;overflow-y:auto;border-right:1px solid var(--line);padding:10px}
+  .hit{display:block;width:100%;text-align:left;cursor:pointer;
+       background:var(--surface);border:1px solid var(--line);border-radius:11px;
+       padding:12px 13px;margin:0 0 8px;color:inherit;font:inherit;
+       transition:border-color 220ms var(--ease),background 220ms var(--ease)}
+  .hit:hover{border-color:color-mix(in oklab,var(--accent) 55%,transparent);
+       background:color-mix(in oklab,var(--accent) 8%,var(--surface))}
+  .hit:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .hit[aria-current="true"]{border-color:var(--accent);
+       box-shadow:0 0 0 1px var(--accent),0 0 22px -8px var(--accent)}
+  .hit-t{font-weight:600;font-size:14px;line-height:1.35}
+  .hit-m{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+  .hit-m span{font:600 10px/1 ui-monospace,Menlo,monospace;letter-spacing:.05em;
+       color:var(--soft);background:#8697ad22;padding:4px 6px;border-radius:5px}
+  .hit.in{animation:fade 340ms var(--ease) both}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){ .hit.in{animation:none} }
+
+  /* THE LOG ITSELF. */
+  .doc{min-height:0;overflow-y:auto;padding:20px 24px;
+       scrollbar-width:thin;scrollbar-color:#8697ad66 transparent}
+  .doc::-webkit-scrollbar{width:10px}
+  .doc::-webkit-scrollbar-thumb{background:#8697ad55;border-radius:999px;
+       border:3px solid transparent;background-clip:content-box}
+  .doc h2{font-size:19px;margin:0 0 4px;letter-spacing:-.01em}
+  .meta{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 18px}
+  .meta span{font:600 10px/1 ui-monospace,Menlo,monospace;letter-spacing:.07em;
+       text-transform:uppercase;color:var(--soft);background:#8697ad22;
+       padding:4px 8px;border-radius:999px}
+  .doc h3{font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;
+       color:color-mix(in oklab,var(--accent) 72%,var(--ink));
+       margin:22px 0 8px;display:flex;align-items:center;gap:10px}
+  .doc h3::after{content:'';flex:1;height:1px;
+       background:linear-gradient(to right,#3fe0c04d,transparent)}
+  .doc h3:first-of-type{margin-top:0}
+  .doc p{margin:0 0 9px;font-size:15px;line-height:1.62}
+  .doc ul{margin:0 0 9px;padding-left:2px;list-style:none}
+  .doc li{font-size:15px;line-height:1.6;margin:6px 0;padding-left:18px;position:relative}
+  .doc li::before{content:'';position:absolute;left:2px;top:.62em;width:5px;height:5px;
+       border-radius:50%;background:#3fe0c099}
+
+  .empty{color:var(--soft);font-size:14px;padding:26px 6px;text-align:center}
+  .live{display:inline-block;width:7px;height:7px;border-radius:50%;background:#2bb673;
+        box-shadow:0 0 9px 1px #2bb67399;margin-right:7px;vertical-align:middle;
+        animation:beat 1.8s ease-in-out infinite}
+  @keyframes beat{0%,100%{opacity:.55}50%{opacity:1}}
+  @media (prefers-reduced-motion:reduce){ .live{animation:none} }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <input id="q" type="search" placeholder="Search logs by topic, tag or stardate"
+           aria-label="Search logs" enterkeyhint="search" autocomplete="off">
+    <button id="go" type="button">Search</button>
+  </div>
+  <div class="wrap">
+    <div class="list" id="list" role="list" aria-label="Matching logs"></div>
+    <div class="doc" id="doc"></div>
+  </div>
+
+<script>
+(function(){
+  'use strict';
+
+  var list=document.getElementById('list');
+  var doc=document.getElementById('doc');
+  var q=document.getElementById('q');
+  var current=null;
+
+  // THE ONLY WAY OUT. A press is reported, never acted on locally: this file does not
+  // know what a log contains until the bot sends it, and pretending otherwise would
+  // mean showing someone a log that might not be the one they asked for.
+  function emit(action, label, value){
+    try{
+      parent.postMessage({instar:1, type:'ui_event',
+        action:action, label:String(label||''), value:String(value===undefined?'':value)
+      }, '*');
+    }catch(e){}
+  }
+
+  function el(tag, cls, text){
+    var n=document.createElement(tag);
+    if(cls) n.className=cls;
+    if(text!==undefined && text!==null) n.textContent=String(text);
+    return n;
+  }
+
+  function say(where, msg){
+    where.innerHTML='';
+    where.appendChild(el('p','empty',msg));
+  }
+
+  // ---- the results list -------------------------------------------------------
+
+  function renderHits(hits, title){
+    list.innerHTML='';
+    if(!hits || !hits.length){
+      say(list, title ? 'No logs matched ' + title : 'No logs matched.');
+      return;
+    }
+    for(var i=0;i<hits.length;i++){
+      (function(h, idx){
+        var b=el('button','hit in');
+        b.type='button';
+        b.setAttribute('role','listitem');
+        b.setAttribute('data-id', String(h.id||''));
+        b.style.animationDelay=(idx*40)+'ms';
+        var t=el('div','hit-t');
+        if(h.open) t.appendChild(el('span','live'));
+        t.appendChild(document.createTextNode(String(h.title||'Untitled log')));
+        b.appendChild(t);
+        var meta=[];
+        if(h.stardate) meta.push('stardate ' + h.stardate);
+        if(h.entries!==undefined && h.entries!==null) meta.push(h.entries + ' entries');
+        if(h.tags && h.tags.length) meta.push(h.tags.join(' · '));
+        if(meta.length){
+          var m=el('div','hit-m');
+          for(var k=0;k<meta.length;k++) m.appendChild(el('span', null, meta[k]));
+          b.appendChild(m);
+        }
+        b.addEventListener('click', function(){
+          select(b);
+          emit('open_log', h.title, h.id);
+        });
+        list.appendChild(b);
+      })(hits[i], i);
+    }
+  }
+
+  // Mark it immediately. Reading a log is a round trip through the bot, and a row that
+  // does not react for two seconds gets clicked again.
+  function select(btn){
+    if(current) current.removeAttribute('aria-current');
+    current=btn;
+    if(btn) btn.setAttribute('aria-current','true');
+  }
+
+  // ---- one log ----------------------------------------------------------------
+
+  function renderLog(log){
+    doc.innerHTML='';
+    if(!log){ say(doc,'Pick a log to read it.'); return; }
+
+    var h=el('h2');
+    if(log.open) h.appendChild(el('span','live'));
+    h.appendChild(document.createTextNode(String(log.title||'Untitled log')));
+    doc.appendChild(h);
+
+    var meta=[];
+    if(log.stardate) meta.push('stardate ' + log.stardate);
+    if(log.entries!==undefined && log.entries!==null) meta.push(log.entries + ' entries');
+    if(log.open) meta.push('recording');
+    if(log.tags && log.tags.length) meta.push(log.tags.join(' · '));
+    if(meta.length){
+      var mw=el('p','meta');
+      for(var i=0;i<meta.length;i++) mw.appendChild(el('span', null, meta[i]));
+      doc.appendChild(mw);
+    }
+
+    var secs=log.sections||[];
+    if(!secs.length){ doc.appendChild(el('p','empty','This log has no entries yet.')); return; }
+    for(var s=0;s<secs.length;s++){
+      var sec=secs[s]||{};
+      if(sec.heading) doc.appendChild(el('h3', null, sec.heading));
+      if(sec.body) doc.appendChild(el('p', null, sec.body));
+      if(sec.items && sec.items.length){
+        var ul=el('ul');
+        for(var j=0;j<sec.items.length;j++) ul.appendChild(el('li', null, sec.items[j]));
+        doc.appendChild(ul);
+      }
+    }
+    doc.scrollTop=0;
+  }
+
+  // ---- what the bot sends -----------------------------------------------------
+  //
+  // Every field is read defensively and rendered with textContent. This frame is
+  // sandboxed, so markup arriving here could not reach the host page anyway — but a
+  // log is dictated by a person and echoed back, and the one thing it must never do
+  // is execute what someone said into a microphone.
+
+  window.addEventListener('message', function(e){
+    var m=e.data;
+    if(!m || m.instar!==1 || m.type!=='data') return;
+    var d=m.data||{};
+    if(d.query!==undefined && d.query!==null) q.value=String(d.query);
+    if(d.hits!==undefined) renderHits(d.hits, d.query ? '"'+d.query+'"' : '');
+    if(d.log!==undefined) renderLog(d.log);
+    if(d.log && d.log.id){
+      var row=list.querySelector('[data-id="'+String(d.log.id).replace(/"/g,'')+'"]');
+      if(row) select(row);
+    }
+  });
+
+  function search(){
+    var v=q.value.trim();
+    emit('search_logs', 'Search', v);
+  }
+  document.getElementById('go').addEventListener('click', search);
+  q.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); search(); } });
+
+  say(list,'Search, or ask out loud.');
+  say(doc,'Pick a log to read it.');
+
+  // Tell the bot we are up, so it can fill the screen without being asked twice.
+  emit('ui_ready','Captain’s Log','');
+})();
+</script>
+</body>
+</html>
