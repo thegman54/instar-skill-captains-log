@@ -53,6 +53,12 @@ def _relay_origin(value: Optional[str]) -> str:
 
 TOOL_ID = "captains_log"
 TITLE = "Captain's Log"
+# What someone says when they mean this tool. Kept deliberately short and specific:
+# the page only fires on these behind an explicit opening verb, and a phrase this
+# skill does not own would hijack an utterance meant for something else.
+PHRASES = [
+    "captains log", "captain log", "captains logs", "the log", "my log", "logs",
+]
 # Mirrors TOOL_HTML_MAX in relay/src/chat-surface.ts. Over this the page drops it
 # silently, so refuse here where there is somewhere to say why.
 HTML_MAX = 400_000
@@ -190,7 +196,11 @@ class CaptainsLogUiTool(BaseTool):
                 return ToolResult.fail(
                     f"bot.html is {len(html)} bytes; the page drops anything over "
                     f"{HTML_MAX}.")
-            ops.append({"op": "tool_ui", "id": TOOL_ID, "title": TITLE, "html": html})
+            # The words that mean "open this". The PAGE keeps these and matches them
+            # itself, so the second time they ask for the log it opens with no turn in
+            # between — before this tool, or you, are involved at all.
+            ops.append({"op": "tool_ui", "id": TOOL_ID, "title": TITLE, "html": html,
+                        "phrases": PHRASES})
         else:
             data: dict[str, Any] = {}
             if query is not None:
