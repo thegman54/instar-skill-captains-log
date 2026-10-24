@@ -221,12 +221,18 @@ class CaptainsLogUiTool(BaseTool):
 
         if mounted:
             return ToolResult.ok({
-                "status": "interface open on the visitor's page",
+                "status": "interface open on the visitor's page, and EMPTY",
+                "next": (
+                    "Fill it NOW, in this same turn: captains_log_search (no query "
+                    "gives the most recent) and send the results straight back through "
+                    "captains_log_ui. Do not wait for anything first — an empty window "
+                    "with you saying you are waiting on it is worse than no window."
+                ),
                 "note": (
-                    "It is empty until you fill it. It will send you ui_ready when it "
-                    "has loaded — answer that with the logs you want shown, usually "
-                    "captains_log_search with no query for the most recent ones. "
-                    "Do not describe the layout; they can see it."
+                    "ui_ready is a nudge, not a gate. It arrives when the interface has "
+                    "loaded and is only useful if you had nothing to show yet; anything "
+                    "you send before it is held and delivered. Never wait on it. "
+                    "Do not describe the layout either — they can see it."
                 ),
             })
         return ToolResult.ok({

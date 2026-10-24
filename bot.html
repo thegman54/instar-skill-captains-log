@@ -22,30 +22,50 @@
 -->
 <style>
   :root{
-    --bg:transparent; --ink:#e7edf6; --soft:#8697ad; --accent:#3fe0c0;
-    --line:#e7edf61f; --surface:#111823b8;
+    /* color-scheme MUST be declared INSIDE the frame. Setting it on the iframe element
+       does nothing for the embedded document, which then gets the UA's light canvas —
+       a sheet of white where the host's dark glass should have shown through. That is
+       what made this window read as a blank page sitting on the app. */
+    color-scheme:dark;
+    --ink:#e7edf6; --soft:#92a3b8; --accent:#3fe0c0;
+    --line:#e7edf61a;
+    /* THE WINDOW IS GLASS; THE CONTENT HAS A GROUND.
+       The frame itself stays transparent so the host's panel shows through it, and the
+       things you actually read — a row, a document — sit on their own surface. Without
+       that, text floats on a background it has no relationship to and the whole window
+       reads as empty space with words in it. */
+    --surface:#16202cc9;        /* a thing you read: rows, the document */
+    --surface-2:#0e151fb3;      /* a thing you type into */
     --font:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
     --ease:cubic-bezier(.2,.7,.2,1);
   }
   *{box-sizing:border-box}
-  html,body{height:100%;margin:0}
-  body{background:var(--bg);color:var(--ink);font-family:var(--font);
+  html,body{height:100%;margin:0;background:transparent}
+  body{color:var(--ink);font-family:var(--font);
        display:flex;flex-direction:column;overflow:hidden}
 
   /* SEARCH. A real field, because "say the words out loud" is not always what someone
      wants — a stardate is eleven digits and nobody enjoys dictating those. */
-  .bar{flex:0 0 auto;display:flex;gap:8px;padding:14px 16px;border-bottom:1px solid var(--line)}
-  .bar input{flex:1 1 auto;min-width:0;background:#0b111a99;color:var(--ink);
-       border:1px solid var(--line);border-radius:10px;padding:11px 13px;
-       font:15px var(--font);outline:none}
-  .bar input:focus{border-color:color-mix(in oklab,var(--accent) 60%,transparent)}
+  .bar{flex:0 0 auto;display:flex;gap:10px;padding:14px 16px;
+       border-bottom:1px solid var(--line)}
+  .bar input{flex:1 1 auto;min-width:0;background:var(--surface-2);color:var(--ink);
+       border:1px solid var(--line);border-radius:10px;padding:11px 14px;
+       font:15px var(--font);outline:none;
+       transition:border-color 200ms var(--ease),background 200ms var(--ease)}
+  .bar input:focus{border-color:color-mix(in oklab,var(--accent) 55%,transparent);
+       background:#0e151fe6}
   .bar input::placeholder{color:var(--soft)}
+  /* A tinted fill made this read as a lit, primary control sitting next to an empty
+     field — the loudest thing on screen was the button you press second. It is quiet
+     now: the field is where you start, and this is the rim you fall back to. */
   .bar button{flex:0 0 auto;appearance:none;cursor:pointer;border-radius:10px;
-       border:1px solid color-mix(in oklab,var(--accent) 50%,transparent);
-       background:color-mix(in oklab,var(--accent) 14%,transparent);
-       color:var(--ink);font:650 12px var(--font);letter-spacing:.1em;
-       text-transform:uppercase;padding:0 16px}
-  .bar button:hover{background:color-mix(in oklab,var(--accent) 24%,transparent)}
+       border:1px solid var(--line);background:var(--surface);
+       color:var(--soft);font:650 11px var(--font);letter-spacing:.12em;
+       text-transform:uppercase;padding:0 18px;
+       transition:color 200ms var(--ease),border-color 200ms var(--ease)}
+  .bar button:hover{color:var(--ink);
+       border-color:color-mix(in oklab,var(--accent) 50%,transparent)}
+  .bar button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
   .wrap{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,340px) 1fr}
   @media (max-width:760px){
@@ -73,7 +93,8 @@
   @media (prefers-reduced-motion:reduce){ .hit.in{animation:none} }
 
   /* THE LOG ITSELF. */
-  .doc{min-height:0;overflow-y:auto;padding:20px 24px;
+  .doc{min-height:0;overflow-y:auto;padding:22px 26px;margin:10px 10px 10px 0;
+       background:var(--surface);border:1px solid var(--line);border-radius:12px;
        scrollbar-width:thin;scrollbar-color:#8697ad66 transparent}
   .doc::-webkit-scrollbar{width:10px}
   .doc::-webkit-scrollbar-thumb{background:#8697ad55;border-radius:999px;
