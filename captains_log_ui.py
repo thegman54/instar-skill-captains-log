@@ -30,6 +30,7 @@ import structlog
 
 from ..base import BaseTool, ToolResult
 from ..registry import register_tool
+from ._log import fetch_entries
 
 log = structlog.get_logger()
 
@@ -204,6 +205,24 @@ class CaptainsLogUiTool(BaseTool):
                 "This conversation is not on a chat surface, so there is no page to "
                 "open. Describe the logs in words instead.")
 
+        # FILL IN THE CONTENT OURSELVES.
+        #
+        # Rows were arriving as stubs — a title and a purpose line — because that is
+        # what captains_log_search returns, and the only way to get the entries was for
+        # the bot to remember to read each log first. It did not, repeatedly, and the
+        # result was a window showing one section of a fifteen-entry log.
+        #
+        # So this stops asking. The tool runs server-side with the same database the
+        # read tool uses: for any row that arrived without entries, it fetches them
+        # directly. No extra turns, no model involvement, nothing to remember.
+        #
+        # The APPROVAL GATE IS NOT ROUTED AROUND: unapproved logs are skipped exactly
+        # as captains_log_read refuses them, and they stay stubs on the page. The gate
+        # exists because an unapproved log is a proposal, not a record, and a different
+        # code path reaching the same rows must not be a way past it.
+        if hits:
+            hits = await self._hydrate(list(hits))
+
         ops: list[dict] = []
 
         # Mount on the first call of a conversation, and on any call that is only
@@ -291,6 +310,53 @@ class CaptainsLogUiTool(BaseTool):
         "you sent the logs in full. Do not re-send it and do not announce that you are "
         "opening it. Comment on it if you have something worth saying, or say nothing."
     )
+
+    async def _hydrate(self, hits: list) -> list:
+        """Attach each approved log's entries to its row, straight from the database."""
+        want = []
+        for h in hits:
+            if not isinstance(h, dict):
+                continue
+            if isinstance(h.get("sections"), (dict, list)) and h.get("sections"):
+                continue                       # already carries its content
+            ident = str(h.get("id") or h.get("stardate") or h.get("log_id") or "").strip()
+            if ident:
+                want.append((h, ident))
+        if not want:
+            return hits
+
+        try:
+            from ...db import get_pool
+            pool = get_pool()
+            if not pool:
+                return hits
+            async with pool.acquire() as conn:
+                for h, ident in want[:40]:
+                    row = await conn.fetchrow(
+                        """SELECT id, stardate, title, tags, status, purpose, closing,
+                                  entry_count
+                           FROM captains_logs
+                           WHERE (stardate = $1 OR id::text = $1)
+                           ORDER BY started_at DESC LIMIT 1""",
+                        ident,
+                    )
+                    if not row or row["status"] != "approved":
+                        continue               # unapproved stays a stub, by design
+                    entries = await fetch_entries(conn, row["id"])
+                    secs: dict[str, list] = {}
+                    for e in entries:
+                        secs.setdefault(e["kind"], []).append({"content": e["content"]})
+                    h["sections"] = secs
+                    h.setdefault("purpose", row["purpose"])
+                    h.setdefault("closing", row["closing"])
+                    h.setdefault("entry_count", row["entry_count"])
+                    if row["tags"]:
+                        h.setdefault("tags", list(row["tags"]))
+        except Exception as e:                                        # noqa: BLE001
+            # A row that could not be filled stays a stub and the page shows it
+            # fetching — worse than instant, better than wrong.
+            log.warning("captains_log_ui_hydrate_failed", error=str(e))
+        return hits
 
     # ---- shaping ----------------------------------------------------------------
 
