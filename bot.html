@@ -117,6 +117,34 @@
        border-radius:50%;background:#3fe0c099}
 
   .empty{color:var(--soft);font-size:14px;padding:26px 6px;text-align:center}
+
+  /* THE SKELETON. One sweep of light travels across the whole block rather than each
+     bar shimmering on its own clock — independent shimmers read as a dozen separate
+     things loading, one sweep reads as a single thing arriving. */
+  .sk-head{margin-bottom:20px}
+  .sk{--sk-base:#8697ad1f;}
+  .sk-h{height:9px;width:132px;border-radius:5px;margin:22px 0 12px;
+        background:color-mix(in oklab,var(--accent) 34%,transparent)}
+  .sk-h:first-child{margin-top:0}
+  .sk-l{height:11px;border-radius:6px;margin:9px 0;background:var(--sk-base)}
+  .sk,.sk-head .meta .sk-live{position:relative}
+  .sk::after{content:'';position:absolute;inset:0;pointer-events:none;border-radius:8px;
+       background:linear-gradient(100deg,transparent 20%,
+         color-mix(in oklab,var(--accent) 16%,transparent) 42%,
+         color-mix(in oklab,var(--ink) 10%,transparent) 50%,
+         color-mix(in oklab,var(--accent) 16%,transparent) 58%,transparent 80%);
+       background-size:220% 100%;
+       animation:sweep 1.5s var(--ease) infinite}
+  @keyframes sweep{from{background-position:120% 0}to{background-position:-120% 0}}
+  /* The chip earns its own pulse: it is the only part that says WHAT is happening. */
+  .sk-live{color:color-mix(in oklab,var(--accent) 80%,var(--ink)) !important;
+       background:color-mix(in oklab,var(--accent) 16%,transparent) !important;
+       animation:breathe 1.5s ease-in-out infinite}
+  @keyframes breathe{0%,100%{opacity:.5}50%{opacity:1}}
+  @media (prefers-reduced-motion:reduce){
+    .sk::after{animation:none;background:none}
+    .sk-live{animation:none;opacity:.85}
+  }
   .live{display:inline-block;width:7px;height:7px;border-radius:50%;background:#2bb673;
         box-shadow:0 0 9px 1px #2bb67399;margin-right:7px;vertical-align:middle;
         animation:beat 1.8s ease-in-out infinite}
@@ -202,7 +230,10 @@
           // render and the log is on screen before the click finishes. Going through
           // the bot for something already in the browser makes a click cost a turn,
           // and a UI that waits seconds to answer a click is not a UI.
-          if(h.sections && h.sections.length){
+          // Does this row actually hold the log, or only facts ABOUT it? A hit that
+          // carries nothing but a purpose line would otherwise render as a complete
+          // log with one section — the entries missing and nothing saying so.
+          if(hasEntries(h)){
             renderLog(h);
           } else {
             // Nothing held for this one: say so immediately rather than sitting on
@@ -217,11 +248,53 @@
     }
   }
 
+  // WHAT A WAIT SHOULD LOOK LIKE.
+  //
+  // "Opening..." is a word where a document is about to be, which tells someone
+  // nothing except that they are waiting. A skeleton in the SHAPE of the log says what
+  // is coming and roughly how much of it: a title, its chips, then sections of a few
+  // lines each. When the real thing lands it replaces a layout that was already the
+  // right shape, so nothing jumps.
+  //
+  // The title is real — it is the row they clicked, and we have it — so the wait is
+  // specific to the thing they asked for rather than generic.
+  // Entries, not merely sections: Purpose and Closing are about the log, and a log
+  // that is only those two is a stub however many sections it technically has.
+  function hasEntries(h){
+    var secs=(h&&h.sections)||[];
+    for(var i=0;i<secs.length;i++){
+      var s=secs[i]||{};
+      if(s.items && s.items.length) return true;
+    }
+    return false;
+  }
+
   function opening(h){
     doc.innerHTML='';
-    var t=el('h2', null, String(h.title||'Untitled log'));
-    doc.appendChild(t);
-    doc.appendChild(el('p','empty','Opening\u2026'));
+    var head=el('div','sk-head');
+    head.appendChild(el('h2', null, String(h.title||'Untitled log')));
+    var chips=el('p','meta');
+    if(h.stardate) chips.appendChild(el('span', null, 'stardate ' + h.stardate));
+    if(h.entries!==undefined && h.entries!==null) chips.appendChild(el('span', null, h.entries + ' entries'));
+    chips.appendChild(el('span','sk-live','opening'));
+    head.appendChild(chips);
+    doc.appendChild(head);
+
+    // Rough proportions of a real log: a short section, a long one, a medium one.
+    var shape=[[3],[2,4],[2]];
+    var wrap=el('div','sk');
+    for(var s=0;s<shape.length;s++){
+      wrap.appendChild(el('div','sk-h'));
+      for(var g=0;g<shape[s].length;g++){
+        for(var i=0;i<shape[s][g];i++){
+          var line=el('div','sk-l');
+          // Ragged, like text. Even bars read as a loading bar, not a paragraph.
+          line.style.width=(62+((s*7+g*11+i*23)%34))+'%';
+          wrap.appendChild(line);
+        }
+      }
+    }
+    doc.appendChild(wrap);
   }
 
   // Mark it immediately. A row that does not react gets clicked again.

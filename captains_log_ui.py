@@ -316,9 +316,14 @@ class CaptainsLogUiTool(BaseTool):
             out["tags"] = [str(t)[:40] for t in tags[:6]]
         if h.get("open"):
             out["open"] = True
-        # CARRY THE CONTENT WHEN IT IS THERE. A row that already holds its log opens
-        # the instant it is clicked, with no turn in between — see the note in execute.
-        if h.get("sections") or h.get("purpose") or h.get("closing"):
+        # CARRY THE CONTENT WHEN IT IS THERE — and only when it is actually there.
+        #
+        # A search hit carries `purpose` but no entries. Treating that as content made
+        # the row look self-contained, so clicking it rendered a log with one section
+        # and none of its fifteen entries, with nothing anywhere saying it was partial.
+        # Purpose and closing are ABOUT the log; the entries ARE the log. Without them
+        # the row stays a stub, the page shows it is fetching, and the bot fills it.
+        if isinstance(h.get("sections"), (dict, list)) and h.get("sections"):
             out["sections"] = CaptainsLogUiTool._sections(h)
         return out
 
