@@ -51,6 +51,17 @@ def _relay_origin(value: Optional[str]) -> str:
     return url
 
 
+# Entry kinds, in the order a log should READ, with the headings people expect.
+# Singular labels came out of the raw kind names — "Decision", "Open Question" — above
+# a list of several, which reads as a mislabelled section rather than a heading.
+KIND_ORDER = ["requirement", "decision", "risk", "idea", "open_question",
+              "action", "note"]
+KIND_LABEL = {
+    "requirement": "Requirements", "decision": "Decisions", "risk": "Risks",
+    "idea": "Ideas", "open_question": "Open Questions", "action": "Actions",
+    "note": "Notes",
+}
+
 TOOL_ID = "captains_log"
 TITLE = "Captain's Log"
 # What someone says when they mean this tool. Kept deliberately short and specific:
@@ -327,7 +338,15 @@ class CaptainsLogUiTool(BaseTool):
 
         raw = g.get("sections")
         if isinstance(raw, dict):
-            for kind, entries in list(raw.items())[:40]:
+            # ORDERED LIKE A DOCUMENT, NOT LIKE A DICTIONARY. Whatever order the kinds
+            # happen to arrive in is an accident of storage; a log reads as what was
+            # required, what was decided, what is risky, what was floated, and what is
+            # still open. A kind this does not know about keeps its place at the end
+            # rather than being dropped.
+            known = [k for k in KIND_ORDER if k in raw]
+            rest = [k for k in raw if k not in KIND_ORDER]
+            for kind in (known + rest)[:40]:
+                entries = raw.get(kind)
                 items = []
                 for e in (entries or [])[:120]:
                     if isinstance(e, dict):
@@ -337,7 +356,8 @@ class CaptainsLogUiTool(BaseTool):
                     if txt:
                         items.append(str(txt)[:1000])
                 if items:
-                    out.append({"heading": str(kind).replace("_", " ").title()[:120],
+                    out.append({"heading": KIND_LABEL.get(
+                                    kind, str(kind).replace("_", " ").title())[:120],
                                 "items": items})
         elif isinstance(raw, list):
             # Already display-shaped.
