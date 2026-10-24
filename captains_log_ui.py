@@ -86,7 +86,9 @@ class CaptainsLogUiTool(BaseTool):
             "and there is no HTML for you to produce.\n\n"
             "It sends presses back to you as ui_event:\n"
             "  search_logs  — they typed a query (`value` is the text; may be empty)\n"
-            "  open_log     — they picked a log (`value` is its stardate/id)\n"
+            "  open_log     — they clicked a log. It is ALREADY OPEN in front of them "
+            "if you sent that log's content with the list, which you should. This is a "
+            "notice so you can comment, NOT a request to send it again.\n"
             "  ui_ready     — the interface finished loading and wants its first fill\n"
             "Answer a press by calling the matching log tool and sending the result "
             "back through here. A press is a request, checked like any other: it does "
@@ -101,10 +103,15 @@ class CaptainsLogUiTool(BaseTool):
                 "hits": {
                     "type": "array",
                     "description": (
-                        "Search results to list, from captains_log_search. Each: "
+                        "The list to show, from captains_log_search. Each: "
                         "{id (stardate), title, stardate?, entries?, tags?, open?}. "
                         "Send [] to show 'nothing matched' rather than leaving stale "
-                        "results on screen."
+                        "results on screen.\n"
+                        "PASS EACH captains_log_read RESULT THROUGH AS THE ROW where "
+                        "you have it: a row carrying its own content opens the instant "
+                        "it is clicked, with no turn in between. A row without it has "
+                        "to wait for you, and a list where clicking costs a round trip "
+                        "feels broken however fast you are."
                     ),
                     "items": {"type": "object"},
                 },
@@ -226,7 +233,9 @@ class CaptainsLogUiTool(BaseTool):
                     "Fill it NOW, in this same turn: captains_log_search (no query "
                     "gives the most recent) and send the results straight back through "
                     "captains_log_ui. Do not wait for anything first — an empty window "
-                    "with you saying you are waiting on it is worse than no window."
+                    "with you saying you are waiting on it is worse than no window. "
+                    "Then captains_log_read each one and send the hits again WITH "
+                    "their content, so every row opens the moment it is clicked."
                 ),
                 "note": (
                     "ui_ready is a nudge, not a gate. It arrives when the interface has "
@@ -243,6 +252,14 @@ class CaptainsLogUiTool(BaseTool):
                      "one they wanted is not there. Do not read the rows back."),
         })
 
+    # Kept next to the tool it explains: this is what the bot is told a press means.
+    PRESS_CONTRACT = (
+        "open_log is a NOTICE, not a request. They clicked a row and it is ALREADY "
+        "open in front of them — if that row carried its content, which it does when "
+        "you sent the logs in full. Do not re-send it and do not announce that you are "
+        "opening it. Comment on it if you have something worth saying, or say nothing."
+    )
+
     # ---- shaping ----------------------------------------------------------------
 
     @staticmethod
@@ -254,9 +271,12 @@ class CaptainsLogUiTool(BaseTool):
         }
         if h.get("stardate"):
             out["stardate"] = str(h["stardate"])[:32]
-        if h.get("entries") is not None:
+        # The read tool says entry_count, the search tool says entries. Accept both
+        # rather than making the bot remember which call it is holding.
+        n = h.get("entries") if h.get("entries") is not None else h.get("entry_count")
+        if n is not None:
             try:
-                out["entries"] = int(h["entries"])
+                out["entries"] = int(n)
             except (TypeError, ValueError):
                 pass
         tags = h.get("tags")
@@ -264,24 +284,63 @@ class CaptainsLogUiTool(BaseTool):
             out["tags"] = [str(t)[:40] for t in tags[:6]]
         if h.get("open"):
             out["open"] = True
+        # CARRY THE CONTENT WHEN IT IS THERE. A row that already holds its log opens
+        # the instant it is clicked, with no turn in between — see the note in execute.
+        if h.get("sections") or h.get("purpose") or h.get("closing"):
+            out["sections"] = CaptainsLogUiTool._sections(h)
+        return out
+
+    @staticmethod
+    def _sections(g: dict) -> list:
+        """Normalise whatever captains_log_read handed back into display sections.
+
+        It returns `sections` as a DICT KEYED BY KIND — {"requirements": [{content,
+        why}], ...} — not a list. Iterating that yields the kind NAMES, which produced
+        a log with no entries in it on a log with fourteen. The display shape is this
+        tool's business, so it converts; the bot passes the read result through
+        untouched and never reshapes anything by hand.
+        """
+        out: list[dict] = []
+        if g.get("purpose"):
+            out.append({"heading": "Purpose", "body": str(g["purpose"])[:4000]})
+
+        raw = g.get("sections")
+        if isinstance(raw, dict):
+            for kind, entries in list(raw.items())[:40]:
+                items = []
+                for e in (entries or [])[:120]:
+                    if isinstance(e, dict):
+                        txt = e.get("content") or ""
+                    else:
+                        txt = e
+                    if txt:
+                        items.append(str(txt)[:1000])
+                if items:
+                    out.append({"heading": str(kind).replace("_", " ").title()[:120],
+                                "items": items})
+        elif isinstance(raw, list):
+            # Already display-shaped.
+            for s in raw[:40]:
+                if not isinstance(s, dict):
+                    continue
+                sec: dict[str, Any] = {}
+                if s.get("heading"):
+                    sec["heading"] = str(s["heading"])[:120]
+                if s.get("body"):
+                    sec["body"] = str(s["body"])[:4000]
+                items = s.get("items")
+                if isinstance(items, list) and items:
+                    sec["items"] = [str(i)[:1000] for i in items[:120]]
+                if sec:
+                    out.append(sec)
+
+        if g.get("closing"):
+            out.append({"heading": "Closing", "body": str(g["closing"])[:4000]})
         return out
 
     @classmethod
     def _clean_log(cls, g: Any) -> dict:
         g = g if isinstance(g, dict) else {}
         out = cls._clean_hit(g)
-        secs = []
-        for s in (g.get("sections") or [])[:40]:
-            s = s if isinstance(s, dict) else {}
-            sec: dict[str, Any] = {}
-            if s.get("heading"):
-                sec["heading"] = str(s["heading"])[:120]
-            if s.get("body"):
-                sec["body"] = str(s["body"])[:4000]
-            items = s.get("items")
-            if isinstance(items, list) and items:
-                sec["items"] = [str(i)[:1000] for i in items[:120]]
-            if sec:
-                secs.append(sec)
-        out["sections"] = secs
+        out["sections"] = cls._sections(g)
         return out

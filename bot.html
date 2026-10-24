@@ -197,6 +197,19 @@
         }
         b.addEventListener('click', function(){
           select(b);
+          // OPEN IT. Do not ASK for it to be opened.
+          // If the row already carries its log — and it should — this is a local
+          // render and the log is on screen before the click finishes. Going through
+          // the bot for something already in the browser makes a click cost a turn,
+          // and a UI that waits seconds to answer a click is not a UI.
+          if(h.sections && h.sections.length){
+            renderLog(h);
+          } else {
+            // Nothing held for this one: say so immediately rather than sitting on
+            // the previous log, which reads as the click having done nothing.
+            opening(h);
+          }
+          // She is TOLD, not asked. The press is a notice: it already happened.
           emit('open_log', h.title, h.id);
         });
         list.appendChild(b);
@@ -204,8 +217,14 @@
     }
   }
 
-  // Mark it immediately. Reading a log is a round trip through the bot, and a row that
-  // does not react for two seconds gets clicked again.
+  function opening(h){
+    doc.innerHTML='';
+    var t=el('h2', null, String(h.title||'Untitled log'));
+    doc.appendChild(t);
+    doc.appendChild(el('p','empty','Opening\u2026'));
+  }
+
+  // Mark it immediately. A row that does not react gets clicked again.
   function select(btn){
     if(current) current.removeAttribute('aria-current');
     current=btn;
