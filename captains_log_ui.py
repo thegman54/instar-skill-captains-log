@@ -123,9 +123,9 @@ class CaptainsLogUiTool(BaseTool):
             "'show me everything'. Run captains_log_search with it (or with no query "
             "at all) and send the hits back through here. Doing nothing leaves them "
             "looking at a button that does not work.\n"
-            "  open_log     — they clicked a log. It is ALREADY OPEN in front of them "
-            "if you sent that log's content with the list, which you should. This is a "
-            "notice so you can comment, NOT a request to send it again.\n"
+            "  open_log     — they clicked a log. It is ALREADY OPEN in front of them, "
+            "with its content, because you sent the logs in full. Reply with the "
+            "TITLE AND NOTHING ELSE, then stop. Never re-send it, never summarise it.\n"
             "  ui_ready     — the interface loaded with NOTHING on it and wants a "
             "first fill. It is not sent when the page reopened the tool already "
             "populated, so receiving it means the screen really is blank.\n"
@@ -316,9 +316,17 @@ class CaptainsLogUiTool(BaseTool):
     # Kept next to the tool it explains: this is what the bot is told a press means.
     PRESS_CONTRACT = (
         "open_log is a NOTICE, not a request. They clicked a row and it is ALREADY "
-        "open in front of them — if that row carried its content, which it does when "
-        "you sent the logs in full. Do not re-send it and do not announce that you are "
-        "opening it. Comment on it if you have something worth saying, or say nothing."
+        "open in front of them, with its content, because you sent the logs in full.\n"
+        "SAY THE TITLE AND NOTHING ELSE. 'The Karyn bot design session.' One short "
+        "line naming what they picked, so they know you saw it — then stop.\n"
+        "Do not re-send it. Do not announce that you are opening it. Do not summarise "
+        "it, count its entries, pull out what is still unresolved, or suggest what to "
+        "do next. They opened a log to read it, not to be read to. If they want any of "
+        "that they will ask, and then it is worth doing properly — unasked it is only "
+        "time between them and the thing they already clicked.\n"
+        "'Comment if you have something worth saying' used to be the rule here and it "
+        "did not work: there is always something worth saying about a log, so it came "
+        "out as a paragraph every time."
     )
 
     async def _hydrate(self, hits: list) -> list:
