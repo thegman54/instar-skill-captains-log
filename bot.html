@@ -348,10 +348,14 @@
   // log is dictated by a person and echoed back, and the one thing it must never do
   // is execute what someone said into a microphone.
 
+  // Has anything actually filled the screen? Read by the ui_ready guard at the bottom.
+  var filled=false;
+
   window.addEventListener('message', function(e){
     var m=e.data;
     if(!m || m.instar!==1 || m.type!=='data') return;
     var d=m.data||{};
+    if(d.hits!==undefined || d.log!==undefined) filled=true;
     if(d.query!==undefined && d.query!==null) q.value=String(d.query);
     if(d.hits!==undefined) renderHits(d.hits, d.query ? '"'+d.query+'"' : '');
     if(d.log!==undefined) renderLog(d.log);
@@ -371,8 +375,20 @@
   say(list,'Search, or ask out loud.');
   say(doc,'Pick a log to read it.');
 
-  // Tell the bot we are up, so it can fill the screen without being asked twice.
-  emit('ui_ready','Captain’s Log','');
+  // ASK FOR A FILL ONLY IF NOTHING IS COMING.
+  //
+  // The page reopens a tool with the data it was last given, and that replay arrives
+  // through the hold-until-loaded queue a tick AFTER mount. Emitting unconditionally
+  // meant every fast open asked to be filled when it was already full — and because a
+  // ui_event starts a whole agent turn of its own, the visitor got a second turn whose
+  // only possible output was a remark about a screen they were already reading.
+  // Observed: "open captains log" opened instantly with all four logs, and she then
+  // spent 20+ seconds searching, resending identical data and describing it.
+  //
+  // One frame of grace is enough: the replay is posted in the same tick as the load.
+  setTimeout(function(){
+    if(!filled) emit('ui_ready','Captain’s Log','');
+  }, 400);
 })();
 </script>
 </body>
