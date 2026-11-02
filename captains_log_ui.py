@@ -25,6 +25,7 @@ button press. Shipping an interface is not a way to get more authority than that
 from pathlib import Path
 from typing import Any, Optional
 
+import json
 import httpx
 import structlog
 
@@ -51,6 +52,42 @@ def _relay_origin(value: Optional[str]) -> str:
         url = "http://" + url[len("ws://"):]
     return url
 
+
+
+# THE RELAY KEYS ON THE BOT SLUG, NOT THE PROFILE SLUG. This file built its URL as
+# /bots/{profile_slug}/ui, which is right for `seven` only because that profile is bound
+# to a bot of the same name. A profile whose two names differ gets a bare 401 from the
+# relay — measured 2026-11-02 on `fleet_cen_alex`, bound to bot `alex-cenora`, where the
+# relay rejected EVERY key on the profile-slug path. The key is not the problem and the
+# 401 does not say so, which is how it gets misread as a credential fault.
+_BOT_SLUG_CACHE: dict[str, str] = {}
+
+
+async def relay_bot_slug(profile_slug: Optional[str]) -> str:
+    """The slug the relay knows this profile's bot by, from its registerabot binding."""
+    slug = (profile_slug or "").strip()
+    if not slug:
+        return slug
+    if slug in _BOT_SLUG_CACHE:
+        return _BOT_SLUG_CACHE[slug]
+    resolved = slug
+    try:
+        from ...db import get_pool
+        pool = get_pool()
+        if pool is not None:
+            async with pool.acquire() as conn:
+                raw = await conn.fetchval(
+                    "SELECT interface_bindings FROM bot_profiles WHERE slug = $1", slug)
+            bindings = json.loads(raw) if isinstance(raw, str) else (raw or [])
+            for b in bindings:
+                if isinstance(b, dict) and b.get("interface") == "registerabot" \
+                        and b.get("bot_slug"):
+                    resolved = str(b["bot_slug"])
+                    break
+    except Exception as e:                                            # noqa: BLE001
+        log.warning("relay_bot_slug_lookup_failed", profile=slug, error=str(e))
+    _BOT_SLUG_CACHE[slug] = resolved
+    return resolved
 
 # Entry kinds, in the order a log should READ, with the headings people expect.
 # Singular labels came out of the raw kind names — "Decision", "Open Question" — above
@@ -270,7 +307,7 @@ class CaptainsLogUiTool(BaseTool):
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post(
-                    f"{relay}/bots/{slug}/ui",
+                    f"{relay}/bots/{await relay_bot_slug(slug)}/ui",
                     json={"session_id": session_id, "ops": ops},
                     headers={"Authorization": f"Bearer {api_key}",
                              "Content-Type": "application/json"},
