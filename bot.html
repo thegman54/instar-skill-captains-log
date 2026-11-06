@@ -67,10 +67,47 @@
        border-color:color-mix(in oklab,var(--accent) 50%,transparent)}
   .bar button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
+  /* ASK THE BOX, NOT THE SCREEN.
+     This file is embedded in a workspace pane whose width has nothing to do with the
+     window's: the same markup is a 900px column on a desktop and a 360px sliver on a
+     phone, and on a tablet it is one of those depending on whether the conversation is
+     beside it. inline-size containment lets the layout answer the only question that
+     matters — how wide am I — without knowing anything about where it is. (It is safe
+     here where `size` would not be: containing the inline axis alone leaves the height
+     chain, and therefore the scrolling panes, intact.) */
+  body{container-type:inline-size;container-name:log}
+
   .wrap{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,340px) 1fr}
-  @media (max-width:760px){
-    .wrap{grid-template-columns:1fr;grid-template-rows:auto 1fr}
-    .list{max-height:38vh;border-right:0;border-bottom:1px solid var(--line)}
+  .back{display:none}
+
+  /* NARROW: TWO SCREENS, NOT TWO CRAMPED PANES.
+     Stacking them gave a list capped at 38vh above a document in whatever was left —
+     about 170px each on a phone, so neither could show a whole anything and both had
+     their own scrollbar. A list and a detail do not fit side by side at this width and
+     the fix is to stop trying: the list fills the box, picking an entry replaces it
+     with the log, and Back returns. One thing at a time, each with room to be read. */
+  @container log (max-width:620px){
+    .wrap{grid-template-columns:1fr}
+    .list,.doc{grid-area:1/1}
+    .list{border-right:0;padding:10px 12px}
+    .doc{margin:10px 12px 12px;padding:18px 18px 22px}
+    body[data-view="list"] .doc{display:none}
+    body[data-view="doc"]  .list{display:none}
+    /* Back belongs to the document, so it scrolls away with it rather than floating
+       over the text it is meant to leave. */
+    body[data-view="doc"] .back{display:inline-flex;align-items:center;gap:7px;
+       appearance:none;cursor:pointer;margin:0 0 14px;padding:8px 13px 8px 10px;
+       border:1px solid var(--line);border-radius:999px;background:var(--surface-2);
+       color:var(--soft);font:650 11px var(--font);letter-spacing:.1em;
+       text-transform:uppercase}
+    body[data-view="doc"] .back:hover{color:var(--ink);
+       border-color:color-mix(in oklab,var(--accent) 50%,transparent)}
+    .back:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+    /* At this width a row is for RECOGNISING an entry, not for reading about it: the
+       title, and the one fact that tells two similar titles apart. The rest is on the
+       screen you are one tap from. */
+    .hit-m span:nth-child(n+2){display:none}
+    .hit-t{font-size:15px}
   }
 
   /* THE RESULTS. */
@@ -172,6 +209,30 @@
   var q=document.getElementById('q');
   var current=null;
 
+  /* WHICH SCREEN IS IN FRONT. Only meaningful on a narrow box — the CSS ignores it
+     entirely when both panes fit — so the JS can set it unconditionally and never has
+     to ask how wide it is. One source of truth, no media-query listener to fall out of
+     step with the stylesheet. */
+  function view(v){ document.body.setAttribute('data-view', v); }
+  view('list');
+
+  // Built once and moved into each rendered log, rather than rebuilt per render: it is
+  // the same control every time and it keeps its listener.
+  var backBtn=(function(){
+    var b=document.createElement('button');
+    b.type='button'; b.className='back';
+    b.setAttribute('aria-label','Back to the list of logs');
+    b.textContent='\u2190 Logs';
+    b.addEventListener('click', function(){
+      view('list');
+      // Put the row they came from back under the thumb.
+      if(current && current.scrollIntoView) {
+        try{ current.scrollIntoView({block:'nearest'}) }catch(e){}
+      }
+    });
+    return b;
+  })();
+
   // THE ONLY WAY OUT. A press is reported, never acted on locally: this file does not
   // know what a log contains until the bot sends it, and pretending otherwise would
   // mean showing someone a log that might not be the one they asked for.
@@ -233,6 +294,7 @@
           // Does this row actually hold the log, or only facts ABOUT it? A hit that
           // carries nothing but a purpose line would otherwise render as a complete
           // log with one section — the entries missing and nothing saying so.
+          view('doc');
           if(hasEntries(h)){
             renderLog(h);
           } else {
@@ -270,7 +332,12 @@
   }
 
   function opening(h){
+    view('doc');
     doc.innerHTML='';
+    // THE WAIT NEEDS A WAY OUT TOO. Without this, a narrow box put you on a skeleton
+    // with no route back to the list — and if the log never arrived, which is exactly
+    // when you are looking at this screen, there was no way off it but a reload.
+    doc.appendChild(backBtn);
     var head=el('div','sk-head');
     head.appendChild(el('h2', null, String(h.title||'Untitled log')));
     var chips=el('p','meta');
@@ -309,6 +376,10 @@
   function renderLog(log){
     doc.innerHTML='';
     if(!log){ say(doc,'Pick a log to read it.'); return; }
+    doc.appendChild(backBtn);
+    // A long log scrolled, then the next one opened halfway down it. Start at the top
+    // of what was actually asked for.
+    try{ doc.scrollTop=0 }catch(e){}
 
     var h=el('h2');
     if(log.open) h.appendChild(el('span','live'));
@@ -357,8 +428,14 @@
     var d=m.data||{};
     if(d.hits!==undefined || d.log!==undefined) filled=true;
     if(d.query!==undefined && d.query!==null) q.value=String(d.query);
-    if(d.hits!==undefined) renderHits(d.hits, d.query ? '"'+d.query+'"' : '');
-    if(d.log!==undefined) renderLog(d.log);
+    // New results mean a new question, so the list is what you want to see — unless a
+    // log came in the same breath, in which case she answered with the log itself and
+    // the list is the thing you would have to go back through.
+    if(d.hits!==undefined){
+      renderHits(d.hits, d.query ? '"'+d.query+'"' : '');
+      if(d.log===undefined) view('list');
+    }
+    if(d.log!==undefined){ renderLog(d.log); if(d.log) view('doc'); }
     if(d.log && d.log.id){
       var row=list.querySelector('[data-id="'+String(d.log.id).replace(/"/g,'')+'"]');
       if(row) select(row);
@@ -367,6 +444,7 @@
 
   function search(){
     var v=q.value.trim();
+    view('list');   // the answer is a list; be looking at it when it lands
     emit('search_logs', 'Search', v);
   }
   document.getElementById('go').addEventListener('click', search);
